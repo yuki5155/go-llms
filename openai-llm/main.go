@@ -161,7 +161,37 @@ func main() {
 		// Handle different finish reasons
 		switch choice.FinishReason {
 		case "stop":
-			fmt.Printf("Structured Output:\n%s\n", choice.Message.Content)
+			fmt.Println("Received structured output. Writing to file...")
+
+			// The content is a JSON string, so we need to unmarshal it twice
+			var jsonString string
+			err := json.Unmarshal(choice.Message.Content, &jsonString)
+			if err != nil {
+				fmt.Printf("Error parsing JSON string: %v\n", err)
+				return
+			}
+
+			var structuredOutput map[string]interface{}
+			err = json.Unmarshal([]byte(jsonString), &structuredOutput)
+			if err != nil {
+				fmt.Printf("Error parsing structured output: %v\n", err)
+				return
+			}
+
+			// Then, marshal it back to JSON with indentation
+			prettyJSON, err := json.MarshalIndent(structuredOutput, "", "  ")
+			if err != nil {
+				fmt.Printf("Error formatting JSON: %v\n", err)
+				return
+			}
+
+			// Write to file
+			err = ioutil.WriteFile("structured_output.json", prettyJSON, 0644)
+			if err != nil {
+				fmt.Printf("Error writing to file: %v\n", err)
+				return
+			}
+			fmt.Println("Structured output written to structured_output.json")
 		case "length":
 			fmt.Println("Warning: The response was truncated due to token limit.")
 		case "content_filter":
