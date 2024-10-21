@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 )
@@ -134,12 +134,12 @@ func main() {
 	// Check the status code
 	if resp.StatusCode != http.StatusOK {
 		fmt.Printf("API returned non-200 status code: %d\n", resp.StatusCode)
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		fmt.Printf("Response body: %s\n", string(body))
 		return
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Printf("Error reading response: %v\n", err)
 		return
@@ -186,7 +186,7 @@ func main() {
 			}
 
 			// Write to file
-			err = ioutil.WriteFile("structured_output.json", prettyJSON, 0644)
+			err = os.WriteFile("structured_output.json", prettyJSON, 0644)
 			if err != nil {
 				fmt.Printf("Error writing to file: %v\n", err)
 				return
