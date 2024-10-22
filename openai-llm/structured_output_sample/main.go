@@ -7,9 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sample/schema"
 )
-
-const openaiAPIEndpoint = "https://api.openai.com/v1/chat/completions"
 
 type Message struct {
 	Role    string `json:"role"`
@@ -17,12 +16,9 @@ type Message struct {
 }
 
 type RequestBody struct {
-	Model          string    `json:"model"`
-	Messages       []Message `json:"messages"`
-	ResponseFormat struct {
-		Type       string          `json:"type"`
-		JSONSchema json.RawMessage `json:"json_schema"`
-	} `json:"response_format"`
+	Model          string               `json:"model"`
+	Messages       []Message            `json:"messages"`
+	ResponseFormat schema.RequestFormat `json:"response_format"`
 }
 
 type ResponseChoice struct {
@@ -38,41 +34,6 @@ type APIResponse struct {
 	Choices []ResponseChoice `json:"choices"`
 }
 
-type JSONSchemaWrapper struct {
-	Name   string        `json:"name"`
-	Schema WeatherSchema `json:"schema"`
-}
-
-type WeatherSchema struct {
-	Type       string                    `json:"type"`
-	Properties map[string]SchemaProperty `json:"properties"`
-	Required   []string                  `json:"required"`
-}
-
-type SchemaProperty struct {
-	Type string   `json:"type"`
-	Enum []string `json:"enum,omitempty"`
-}
-
-func createWeatherSchema() JSONSchemaWrapper {
-	return JSONSchemaWrapper{
-		Name: "weather_response",
-		Schema: WeatherSchema{
-			Type: "object",
-			Properties: map[string]SchemaProperty{
-				"location":    {Type: "string"},
-				"temperature": {Type: "number"},
-				"unit": {
-					Type: "string",
-					Enum: []string{"C", "F"},
-				},
-				"conditions": {Type: "string"},
-			},
-			Required: []string{"location", "temperature", "unit", "conditions"},
-		},
-	}
-}
-
 func main() {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -80,44 +41,95 @@ func main() {
 		return
 	}
 
-	weatherSchema := createWeatherSchema()
-	weatherSchemaJSON, err := json.Marshal(weatherSchema)
+	// WeatherSchemaの作成
+	weatherSchema := schema.NewWeatherSchema()
+	schemaJSON, err := json.Marshal(weatherSchema)
 	if err != nil {
 		fmt.Printf("Error marshalling weather schema: %v\n", err)
 		return
 	}
 
+	// リクエストボディの作成
 	reqBody := RequestBody{
 		Model: "gpt-4o-2024-08-06",
 		Messages: []Message{
 			{
 				Role:    "system",
-				Content: "You are a helpful assistant designed to output JSON about weather conditions.",
+				Content: "You are a helpful assistant designed to output weather information in JSON format.",
 			},
 			{
 				Role:    "user",
 				Content: "What's the weather like in Tokyo today?",
 			},
 		},
-		ResponseFormat: struct {
-			Type       string          `json:"type"`
-			JSONSchema json.RawMessage `json:"json_schema"`
-		}{
+		ResponseFormat: schema.RequestFormat{
 			Type:       "json_schema",
-			JSONSchema: weatherSchemaJSON,
+			JSONSchema: schemaJSON,
 		},
 	}
 
-	jsonData, err := json.Marshal(reqBody)
+	// OpenAI APIにリクエストを送信
+	resp, err := sendRequest(reqBody, apiKey)
 	if err != nil {
-		fmt.Printf("Error marshalling request: %v\n", err)
+		fmt.Printf("Error sending request: %v\n", err)
 		return
 	}
 
-	req, err := http.NewRequest("POST", openaiAPIEndpoint, bytes.NewBuffer(jsonData))
+	// レスポンスの処理
+	if len(resp.Choices) > 0 {
+		choice := resp.Choices[0]
+
+		switch choice.FinishReason {
+		case "stop":
+			if choice.Message.Refusal != nil {
+				fmt.Printf("The model refused to generate a response: %s\n", *choice.Message.Refusal)
+				return
+			}
+
+			// デバッグ出力
+			fmt.Printf("Raw content: %s\n", string(choice.Message.Content))
+
+			// 最初のJSONアンマーシャル：文字列として取得
+			var jsonString string
+			if err := json.Unmarshal(choice.Message.Content, &jsonString); err != nil {
+				fmt.Printf("Error unmarshaling outer JSON: %v\n", err)
+				return
+			}
+
+			// 文字列からWeatherResponseへのアンマーシャル
+			var weather schema.WeatherResponse
+			if err := json.Unmarshal([]byte(jsonString), &weather); err != nil {
+				fmt.Printf("Error unmarshaling inner JSON: %v\n", err)
+				return
+			}
+
+			// レスポンスの表示
+			prettyJSON, err := json.MarshalIndent(weather, "", "  ")
+			if err != nil {
+				fmt.Printf("Error formatting response: %v\n", err)
+				return
+			}
+			fmt.Printf("Weather Information:\n%s\n", string(prettyJSON))
+
+		case "length":
+			fmt.Println("Warning: The response was truncated due to token limit.")
+		case "content_filter":
+			fmt.Println("Warning: The response was filtered due to content restrictions.")
+		default:
+			fmt.Printf("Unexpected finish reason: %s\n", choice.FinishReason)
+		}
+	}
+}
+
+func sendRequest(reqBody RequestBody, apiKey string) (*APIResponse, error) {
+	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		fmt.Printf("Error creating request: %v\n", err)
-		return
+		return nil, fmt.Errorf("error marshalling request: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -126,85 +138,24 @@ func main() {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("Error sending request: %v\n", err)
-		return
+		return nil, fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Check the status code
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("API returned non-200 status code: %d\n", resp.StatusCode)
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Response body: %s\n", string(body))
-		return
+		return nil, fmt.Errorf("API returned non-200 status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("Error reading response: %v\n", err)
-		return
+		return nil, fmt.Errorf("error reading response: %v", err)
 	}
-
-	// Print the raw response for debugging
-	fmt.Printf("Raw API response:\n%s\n", string(body))
 
 	var apiResp APIResponse
-	err = json.Unmarshal(body, &apiResp)
-	if err != nil {
-		fmt.Printf("Error parsing response: %v\n", err)
-		return
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
 	}
 
-	if len(apiResp.Choices) > 0 {
-		choice := apiResp.Choices[0]
-
-		// Handle different finish reasons
-		switch choice.FinishReason {
-		case "stop":
-			fmt.Println("Received structured output. Writing to file...")
-
-			// The content is a JSON string, so we need to unmarshal it twice
-			var jsonString string
-			err := json.Unmarshal(choice.Message.Content, &jsonString)
-			if err != nil {
-				fmt.Printf("Error parsing JSON string: %v\n", err)
-				return
-			}
-
-			var structuredOutput map[string]interface{}
-			err = json.Unmarshal([]byte(jsonString), &structuredOutput)
-			if err != nil {
-				fmt.Printf("Error parsing structured output: %v\n", err)
-				return
-			}
-
-			// Then, marshal it back to JSON with indentation
-			prettyJSON, err := json.MarshalIndent(structuredOutput, "", "  ")
-			if err != nil {
-				fmt.Printf("Error formatting JSON: %v\n", err)
-				return
-			}
-
-			// Write to file
-			err = os.WriteFile("structured_output.json", prettyJSON, 0644)
-			if err != nil {
-				fmt.Printf("Error writing to file: %v\n", err)
-				return
-			}
-			fmt.Println("Structured output written to structured_output.json")
-		case "length":
-			fmt.Println("Warning: The response was truncated due to token limit.")
-		case "content_filter":
-			fmt.Println("Warning: The response was filtered due to content restrictions.")
-		default:
-			fmt.Printf("Unexpected finish reason: %s\n", choice.FinishReason)
-		}
-
-		// Handle refusals
-		if choice.Message.Refusal != nil {
-			fmt.Printf("The model refused to generate a response: %s\n", *choice.Message.Refusal)
-		}
-	} else {
-		fmt.Println("No choices in the API response.")
-	}
+	return &apiResp, nil
 }
