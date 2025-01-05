@@ -40,7 +40,7 @@ func main() {
 	}
 
 	// OpenAI APIにリクエストを送信
-	resp, err := client.SendRequest(opts)
+	resp, err := client.SendRequestWithStructuredOutput(opts)
 	if err != nil {
 		fmt.Printf("Error sending request: %v\n", err)
 		return
@@ -53,6 +53,9 @@ func main() {
 		return
 	}
 
+	// キーを指定して情報を取得
+	fmt.Printf("Temperature: %v\n", weather.Temperature)
+
 	// 結果の表示
 	prettyJSON, err := json.MarshalIndent(weather, "", "  ")
 	if err != nil {
@@ -60,4 +63,5 @@ func main() {
 		return
 	}
 	fmt.Printf("Weather Information:\n%s\n", string(prettyJSON))
+
 }

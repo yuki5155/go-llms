@@ -73,7 +73,7 @@ func NewMessage(role Role, content string) Message {
 	}
 }
 
-func (c *Client) SendRequest(opts RequestOptions) (*APIResponse, error) {
+func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIResponse, error) {
 	if len(opts.Messages) == 0 {
 		return nil, fmt.Errorf("at least one message is required")
 	}
