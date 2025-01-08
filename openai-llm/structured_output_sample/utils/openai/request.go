@@ -32,9 +32,10 @@ type RequestFormat struct {
 }
 
 type RequestBody struct {
-	Model          string        `json:"model"`
-	Messages       []Message     `json:"messages"`
-	ResponseFormat RequestFormat `json:"response_format"`
+	Model          string          `json:"model"`
+	Messages       []Message       `json:"messages"`
+	ResponseFormat RequestFormat   `json:"response_format,omitempty"`
+	Tools          json.RawMessage `json:"tools,omitempty"`
 }
 
 type ClientConfig struct {
@@ -71,6 +72,64 @@ func NewMessage(role Role, content string) Message {
 		Role:    role,
 		Content: content,
 	}
+}
+
+type functionCallRequestBody struct {
+	Model    string          `json:"model"`
+	Messages []Message       `json:"messages"`
+	Tools    json.RawMessage `json:"tools"`
+}
+
+func (c *Client) SendRequestWithFunctionCall(opts RequestOptions) (*ChatCompletion, error) {
+	if len(opts.Messages) == 0 {
+		return nil, fmt.Errorf("at least one message is required")
+	}
+
+	reqBody := functionCallRequestBody{
+		Model:    c.config.Model,
+		Messages: opts.Messages,
+		Tools:    opts.Schema,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling request: %v", err)
+	}
+	req, err := http.NewRequest("POST", c.config.Endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+
+	resp, err := c.config.Client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned non-200 status code: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response: %v", err)
+	}
+	var parsedJson map[string]interface{}
+	if err := json.Unmarshal(body, &parsedJson); err != nil {
+		return nil, fmt.Errorf("error unmarshaling JSON: %v", err)
+	}
+
+	var completion *ChatCompletion
+	if err := json.Unmarshal(body, &completion); err != nil {
+		return nil, fmt.Errorf("error parsing response: %v", err)
+	}
+
+	return completion, nil
+
 }
 
 func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIResponse, error) {
