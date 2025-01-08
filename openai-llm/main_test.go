@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 	"sample/schema"
-	"sample/utils/openai"
+	"sample/utils"
 	"strings"
 	"testing"
 )
@@ -53,9 +53,9 @@ func TestFunctionCall(t *testing.T) {
 		fmt.Println("Please set the OPENAI_API_KEY environment variable.")
 		return
 	}
-	// OpenAIクライアントの設定と作成
-	config := openai.NewClientConfig(apiKey)
-	client := openai.NewClient(config)
+	// utilsクライアントの設定と作成
+	config := utils.NewClientConfig(apiKey)
+	client := utils.NewClient(config)
 	weatherSchema := schema.NewWeatherFunctionCallSchema()
 	tools := []schema.Tool{*weatherSchema}
 	toolsJSON, err := json.Marshal(tools)
@@ -63,11 +63,11 @@ func TestFunctionCall(t *testing.T) {
 		fmt.Printf("Error marshalling weather schema: %v\n", err)
 		return
 	}
-	messages := []openai.Message{
-		openai.NewMessage(openai.RoleSystem, "You are a helpful assistant designed to output weather information in JSON format."),
-		openai.NewMessage(openai.RoleUser, "What's the weather like in Tokyo today?"),
+	messages := []utils.Message{
+		utils.NewMessage(utils.RoleSystem, "You are a helpful assistant designed to output weather information in JSON format."),
+		utils.NewMessage(utils.RoleUser, "What's the weather like in Tokyo today?"),
 	}
-	opts := openai.RequestOptions{
+	opts := utils.RequestOptions{
 		Messages: messages,
 		Schema:   toolsJSON,
 	}

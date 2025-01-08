@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sample/schema"
-	"sample/utils/openai"
+	"sample/utils"
 )
 
 func main() {
@@ -15,9 +15,9 @@ func main() {
 		return
 	}
 
-	// OpenAIクライアントの設定と作成
-	config := openai.NewClientConfig(apiKey)
-	client := openai.NewClient(config)
+	// utilsクライアントの設定と作成
+	config := utils.NewClientConfig(apiKey)
+	client := utils.NewClient(config)
 
 	// WeatherSchemaの作成
 	weatherSchema := schema.NewWeatherSchema()
@@ -28,18 +28,18 @@ func main() {
 	}
 
 	// メッセージの準備
-	messages := []openai.Message{
-		openai.NewMessage(openai.RoleSystem, "You are a helpful assistant designed to output weather information in JSON format."),
-		openai.NewMessage(openai.RoleUser, "What's the weather like in Tokyo today?"),
+	messages := []utils.Message{
+		utils.NewMessage(utils.RoleSystem, "You are a helpful assistant designed to output weather information in JSON format."),
+		utils.NewMessage(utils.RoleUser, "What's the weather like in Tokyo today?"),
 	}
 
 	// リクエストオプションの作成
-	opts := openai.RequestOptions{
+	opts := utils.RequestOptions{
 		Messages: messages,
 		Schema:   schemaJSON,
 	}
 
-	// OpenAI APIにリクエストを送信
+	// utils APIにリクエストを送信
 	resp, err := client.SendRequestWithStructuredOutput(opts)
 	if err != nil {
 		fmt.Printf("Error sending request: %v\n", err)
@@ -47,7 +47,7 @@ func main() {
 	}
 
 	// レスポンスの処理
-	weather, err := openai.HandleResponse[schema.WeatherResponse](resp)
+	weather, err := utils.HandleResponse[schema.WeatherResponse](resp)
 	if err != nil {
 		fmt.Printf("Error handling response: %v\n", err)
 		return
