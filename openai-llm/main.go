@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sample/schema"
-	"sample/utils"
+
+	"github.com/yuki5155/go-llms/openai-llm/schema"
+	"github.com/yuki5155/go-llms/openai-llm/utils"
 )
 
 func main() {
