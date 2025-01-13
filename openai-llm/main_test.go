@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sample/schema"
-	"sample/utils"
 	"strings"
 	"testing"
+
+	"github.com/yuki5155/openai-llm/schema"
+	"github.com/yuki5155/openai-llm/utils"
 )
 
 func TestSample(t *testing.T) {

@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sample/schema"
-	"sample/utils"
+
+	"github.com/yuki5155/openai-llm/schema"
+	"github.com/yuki5155/openai-llm/utils"
 )
 
 func main() {
