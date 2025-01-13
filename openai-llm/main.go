@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yuki5155/openai-llm/schema"
-	"github.com/yuki5155/openai-llm/utils"
+	"github.com/yuki5155/go-llms/openai-llm/schema"
+	"github.com/yuki5155/go-llms/openai-llm/utils"
 )
 
 func main() {
