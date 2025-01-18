@@ -76,6 +76,51 @@ func TestImageAnalyze(t *testing.T) {
 		return
 	}
 
-	fmt.Println(res.Choices[0].Message.Content)
+	fmt.Println(res.GetMessages()[0].Content)
+
+}
+
+// load a image from dir and send it to openai
+
+// image analyze with structured_output
+func TestImageAnalyzeWithStructuredOutput(t *testing.T) {
+	err := loadEnv("../.env")
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		log.Fatal("Please set the OPENAI_API_KEY environment variable.")
+		return
+	}
+	// utilsクライアントの設定と作成
+	config := utils.NewClientConfig(apiKey)
+	client := utils.NewClient(config)
+	imageSchema := schema.NewImageAnalysisSchema()
+	schemaJSON, err := json.Marshal(imageSchema)
+	if err != nil {
+		fmt.Printf("Error marshalling weather schema: %v\n", err)
+		return
+	}
+	messages := []utils.Message{
+		utils.NewMessageWithImage("https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg", "tell me the iamge"),
+	}
+	opts := utils.RequestOptions{
+		Messages: messages,
+		Schema:   schemaJSON,
+	}
+	res, err := client.SendRequestWithStructuredOutput(opts)
+	if err != nil {
+		fmt.Printf("Error sending request: %v\n", err)
+		return
+	}
+	imageAnalyze, err := utils.HandleResponse[schema.ImageAnalysisResponse](res)
+	if err != nil {
+		fmt.Printf("Error handling response: %v\n", err)
+		return
+	}
+	fmt.Println(imageAnalyze.Category)
+	fmt.Println(imageAnalyze.Description)
+	fmt.Println(imageAnalyze.Objects)
 
 }

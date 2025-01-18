@@ -95,3 +95,16 @@ func (c *ChatCompletion) GetAllFunctionCalls(functionName string) ([]*ToolCall, 
 
 	return calls, nil
 }
+
+func (c *ChatCompletion) GetMessages() []ChatMessage {
+	if len(c.Choices) == 0 {
+		return nil
+	}
+
+	var messages []ChatMessage
+	for _, choice := range c.Choices {
+		messages = append(messages, choice.Message)
+	}
+
+	return messages
+}
