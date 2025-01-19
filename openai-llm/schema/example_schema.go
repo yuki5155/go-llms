@@ -103,3 +103,84 @@ func NewImageAnalysisSchema() *ImageAnalysisSchema {
 		},
 	}
 }
+
+// ----------------------------------------------------------------------------
+
+// ObjectAnalysisSchema はオブジェクト分析のスキーマを定義します
+type ObjectAnalysisSchema struct {
+	Name   string     `json:"name"`
+	Schema BaseSchema `json:"schema"`
+}
+
+// ObjectAnalysisResponse はオブジェクト分析のレスポンスを定義します
+type ObjectAnalysisResponse struct {
+	Objects []ObjectItem `json:"objects"`
+}
+
+// ObjectItem は分析された個別のオブジェクトを表す構造体です
+type ObjectItem struct {
+	Name     string `json:"name"`
+	Category string `json:"category"`
+}
+
+const ObjectAnalysisPrompt = `Please analyze the objects in the image and provide information in the following format:
+{
+    "objects": [
+        {
+            "name": "",
+            "category": ""
+        }
+    ]
+}
+
+Rules and guidelines:
+1. For name: Provide a descriptive name for the identified object
+2. For category: Use a single, concise term that best categorizes the object
+
+Example response format:
+{
+    "objects": [
+        {
+            "name": "Red Chair",
+            "category": "furniture"
+        },
+        {
+            "name": "Coffee Cup",
+            "category": "kitchenware"
+        }
+    ]
+}
+
+Please identify and list all distinct objects visible in the image.`
+
+func NewObjectAnalysisSchema() *ObjectAnalysisSchema {
+	falseValue := false
+	return &ObjectAnalysisSchema{
+		Name: "object_analysis_response",
+		Schema: BaseSchema{
+			Type: "object",
+			Properties: map[string]SchemaProperty{
+				"objects": {
+					Type:        "array",
+					Description: "List of objects detected in the image",
+					Items: &SchemaProperty{
+						Type: "object",
+						Properties: map[string]SchemaProperty{
+							"name": {
+								Type:        "string",
+								Description: "Name of the identified object",
+							},
+							"category": {
+								Type:        "string",
+								Description: "Category of the identified object",
+							},
+						},
+						Required: []string{"name", "category"},
+					},
+				},
+			},
+			Required:             []string{"objects"},
+			AdditionalProperties: &falseValue,
+		},
+	}
+}

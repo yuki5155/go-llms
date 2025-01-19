@@ -64,7 +64,6 @@ func HandleResponse[T any](resp *APIResponse) (*T, error) {
 	}
 
 	choice := resp.Choices[0]
-
 	switch choice.FinishReason {
 	case "stop":
 		if choice.Message.Refusal != nil {

@@ -124,3 +124,71 @@ func TestImageAnalyzeWithStructuredOutput(t *testing.T) {
 	fmt.Println(imageAnalyze.Objects)
 
 }
+
+func TestObjectAnalyzeWithStructuredOutput(t *testing.T) {
+	err := loadEnv("../.env")
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		log.Fatal("Please set the OPENAI_API_KEY environment variable.")
+		return
+	}
+
+	// クライアントの設定と作成
+	config := utils.NewClientConfig(apiKey)
+	client := utils.NewClient(config)
+
+	// オブジェクト分析スキーマの作成
+	objectSchema := schema.NewObjectAnalysisSchema()
+	schemaJSON, err := json.Marshal(objectSchema)
+	if err != nil {
+		t.Fatalf("Error marshalling object schema: %v\n", err)
+		return
+	}
+
+	// テスト用の画像URLとメッセージの設定
+	messages := []utils.Message{
+		utils.NewMessageWithImage("https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg", "analyze the objects in this image"),
+	}
+
+	// リクエストオプションの設定
+	opts := utils.RequestOptions{
+		Messages: messages,
+		Schema:   schemaJSON,
+	}
+
+	// 構造化出力でリクエストを送信
+	res, err := client.SendRequestWithStructuredOutput(opts)
+	if err != nil {
+		t.Fatalf("Error sending request: %v\n", err)
+		return
+	}
+
+	// デバッグ用にレスポンスの内容を出力
+	fmt.Printf("Raw response: %+v\n", res)
+
+	response, err := utils.HandleResponse[schema.ObjectAnalysisResponse](res)
+	if err != nil {
+		t.Fatalf("Error handling response: %v\n", err)
+		return
+	}
+
+	// 結果の検証
+	if len(response.Objects) == 0 {
+		t.Error("Expected at least one object in the response")
+		return
+	}
+
+	// 各オブジェクトの出力と検証
+	for i, obj := range response.Objects {
+		if obj.Name == "" {
+			t.Errorf("Object %d: Name should not be empty", i)
+		}
+		if obj.Category == "" {
+			t.Errorf("Object %d: Category should not be empty", i)
+		}
+		fmt.Printf("Object %d: Name=%s, Category=%s\n", i, obj.Name, obj.Category)
+	}
+}
