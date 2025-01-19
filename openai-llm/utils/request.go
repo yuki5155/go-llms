@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -107,6 +108,26 @@ func NewMessageWithImage(imageUrl string, text string) Message {
 
 	contentBytes, _ := json.Marshal([]Content{imageContent, messageContent})
 
+	return Message{
+		Role:    "user",
+		Content: contentBytes,
+	}
+}
+
+func NewMessageWithImageBase64(imageBytes []byte, text string) Message {
+	base64Str := base64.StdEncoding.EncodeToString(imageBytes)
+	dataURL := fmt.Sprintf("data:image/jpeg;base64,%s", base64Str)
+	imageContent := Content{
+		Type: "image_url",
+		ImageUrl: &ImageUrl{
+			Url: dataURL,
+		},
+	}
+	messageContent := Content{
+		Text: text,
+		Type: "text",
+	}
+	contentBytes, _ := json.Marshal([]Content{imageContent, messageContent})
 	return Message{
 		Role:    "user",
 		Content: contentBytes,

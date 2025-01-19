@@ -192,3 +192,51 @@ func TestObjectAnalyzeWithStructuredOutput(t *testing.T) {
 		fmt.Printf("Object %d: Name=%s, Category=%s\n", i, obj.Name, obj.Category)
 	}
 }
+
+func TestStructuredOutputBase64(t *testing.T) {
+	err := loadEnv("../.env")
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		log.Fatal("Please set the OPENAI_API_KEY environment variable.")
+		return
+	}
+	config := utils.NewClientConfig(apiKey)
+	client := utils.NewClient(config)
+	imageSchema := schema.NewImageAnalysisSchema()
+	schemaJSON, err := json.Marshal(imageSchema)
+	if err != nil {
+		fmt.Printf("Error marshalling weather schema: %v\n", err)
+		return
+	}
+
+	imagePath := "./images/31353427_s.jpg"
+	bytes, err := os.ReadFile(imagePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	imageMessage := utils.NewMessageWithImageBase64(bytes, "tell me the iamge")
+	messages := []utils.Message{
+		imageMessage,
+	}
+	opts := utils.RequestOptions{
+		Messages: messages,
+		Schema:   schemaJSON,
+	}
+	res, err := client.SendRequestWithStructuredOutput(opts)
+	if err != nil {
+		fmt.Printf("Error sending request: %v\n", err)
+		return
+	}
+	imageAnalyze, err := utils.HandleResponse[schema.ImageAnalysisResponse](res)
+	if err != nil {
+		fmt.Printf("Error handling response: %v\n", err)
+		return
+	}
+	fmt.Println(imageAnalyze.Category)
+	fmt.Println(imageAnalyze.Description)
+	fmt.Println(imageAnalyze.Objects)
+}
