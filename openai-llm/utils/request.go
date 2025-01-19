@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,9 +22,19 @@ const (
 	RoleAssistant Role = "assistant"
 )
 
+type ImageUrl struct {
+	Url string `json:"url"`
+}
+
+type Content struct {
+	Text     string    `json:"text,omitempty"`
+	Type     string    `json:"type,omitempty"`
+	ImageUrl *ImageUrl `json:"image_url,omitempty"`
+}
+
 type Message struct {
-	Role    Role   `json:"role"`
-	Content string `json:"content"`
+	Role    Role            `json:"role"`
+	Content json.RawMessage `json:"content"`
 }
 
 type RequestFormat struct {
@@ -68,9 +79,58 @@ type RequestOptions struct {
 }
 
 func NewMessage(role Role, content string) Message {
+	// コンテンツを文字列としてJSON形式にエンコード
+	contentBytes, err := json.Marshal(content)
+	if err != nil {
+		// エラーハンドリングが必要な場合は、
+		// 関数のシグネチャを (Message, error) に変更することを検討
+		return Message{}
+	}
+
 	return Message{
 		Role:    role,
-		Content: content,
+		Content: contentBytes,
+	}
+}
+
+func NewMessageWithImage(imageUrl string, text string) Message {
+	imageContent := Content{
+		Type: "image_url",
+		ImageUrl: &ImageUrl{
+			Url: imageUrl,
+		},
+	}
+
+	messageContent := Content{
+		Text: text,
+		Type: "text",
+	}
+
+	contentBytes, _ := json.Marshal([]Content{imageContent, messageContent})
+
+	return Message{
+		Role:    "user",
+		Content: contentBytes,
+	}
+}
+
+func NewMessageWithImageBase64(imageBytes []byte, text string) Message {
+	base64Str := base64.StdEncoding.EncodeToString(imageBytes)
+	dataURL := fmt.Sprintf("data:image/jpeg;base64,%s", base64Str)
+	imageContent := Content{
+		Type: "image_url",
+		ImageUrl: &ImageUrl{
+			Url: dataURL,
+		},
+	}
+	messageContent := Content{
+		Text: text,
+		Type: "text",
+	}
+	contentBytes, _ := json.Marshal([]Content{imageContent, messageContent})
+	return Message{
+		Role:    "user",
+		Content: contentBytes,
 	}
 }
 

@@ -14,9 +14,12 @@ type BaseSchema struct {
 
 // SchemaProperty はJSONスキーマのプロパティを表現します
 type SchemaProperty struct {
-	Type        string   `json:"type"`
-	Description string   `json:"description,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
+	Type        string                    `json:"type"`
+	Description string                    `json:"description,omitempty"`
+	Enum        []string                  `json:"enum,omitempty"`
+	Items       *SchemaProperty           `json:"items,omitempty"`
+	Required    []string                  `json:"required,omitempty"`
+	Properties  map[string]SchemaProperty `json:"properties,omitempty"`
 }
 
 // RequestFormat はOpenAIへのリクエストのフォーマットを定義します
