@@ -45,7 +45,7 @@ type RequestFormat struct {
 type RequestBody struct {
 	Model          string          `json:"model"`
 	Messages       []Message       `json:"messages"`
-	ResponseFormat RequestFormat   `json:"response_format,omitempty"`
+	ResponseFormat *RequestFormat  `json:"response_format,omitempty"`
 	Tools          json.RawMessage `json:"tools,omitempty"`
 }
 
@@ -134,21 +134,16 @@ func NewMessageWithImageBase64(imageBytes []byte, text string) Message {
 	}
 }
 
-type functionCallRequestBody struct {
-	Model    string          `json:"model"`
-	Messages []Message       `json:"messages"`
-	Tools    json.RawMessage `json:"tools"`
-}
-
 func (c *Client) SendRequestWithFunctionCall(opts RequestOptions) (*ChatCompletion, error) {
 	if len(opts.Messages) == 0 {
 		return nil, fmt.Errorf("at least one message is required")
 	}
 
-	reqBody := functionCallRequestBody{
-		Model:    c.config.Model,
-		Messages: opts.Messages,
-		Tools:    opts.Schema,
+	reqBody := RequestBody{
+		Model:          c.config.Model,
+		Messages:       opts.Messages,
+		Tools:          opts.Schema,
+		ResponseFormat: nil,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -200,7 +195,7 @@ func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIRespo
 	reqBody := RequestBody{
 		Model:    c.config.Model,
 		Messages: opts.Messages,
-		ResponseFormat: RequestFormat{
+		ResponseFormat: &RequestFormat{
 			Type:       "json_schema",
 			JSONSchema: opts.Schema,
 		},
