@@ -47,7 +47,7 @@ func (e *ResponseError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Type, e.Message)
 }
 
-// NewResponseError は新しいResponseErrorを作成します
+// [TODO]NewResponseError は新しいResponseErrorを作成します
 func NewResponseError(errorType, message string) *ResponseError {
 	return &ResponseError{
 		Type:    errorType,
