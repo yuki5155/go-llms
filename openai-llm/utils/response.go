@@ -37,6 +37,7 @@ func ParseStructuredResponse[T any](content json.RawMessage) (*T, error) {
 	return &result, nil
 }
 
+// カスタムエラーにディレクトリに移行する
 type ResponseError struct {
 	Type    string
 	Message string
