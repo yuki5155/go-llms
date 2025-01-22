@@ -1,6 +1,9 @@
 package utils
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 type ChatCompletion struct {
 	Choices           []Choice `json:"choices"`
@@ -14,16 +17,14 @@ type ChatCompletion struct {
 
 type Choice struct {
 	FinishReason string      `json:"finish_reason"`
-	Index        int         `json:"index"`
-	LogProbs     any         `json:"logprobs"`
 	Message      ChatMessage `json:"message"` // Message を ChatMessage に変更
 }
 
 type ChatMessage struct { // Message を ChatMessage に変更
-	Content   any        `json:"content"`
-	Refusal   any        `json:"refusal"`
-	Role      string     `json:"role"`
-	ToolCalls []ToolCall `json:"tool_calls"`
+	Content   json.RawMessage `json:"content"`
+	Refusal   *string         `json:"refusal,omitempty"`
+	Role      string          `json:"role"`
+	ToolCalls []ToolCall      `json:"tool_calls,omitempty"`
 }
 
 type ToolCall struct {

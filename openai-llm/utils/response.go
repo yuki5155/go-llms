@@ -5,17 +5,8 @@ import (
 	"fmt"
 )
 
-type ResponseChoice struct {
-	Message struct {
-		Role    string          `json:"role"`
-		Content json.RawMessage `json:"content"`
-		Refusal *string         `json:"refusal,omitempty"`
-	} `json:"message"`
-	FinishReason string `json:"finish_reason"`
-}
-
 type APIResponse struct {
-	Choices []ResponseChoice `json:"choices"`
+	Choices []Choice `json:"choices"`
 }
 
 func ParseStructuredResponse[T any](content json.RawMessage) (*T, error) {
