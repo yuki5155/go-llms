@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yuki5155/go-llms/openai-llm/consts"
 	"github.com/yuki5155/go-llms/openai-llm/schema"
 	"github.com/yuki5155/go-llms/openai-llm/utils"
 )
@@ -55,7 +56,7 @@ func TestFunctionCall(t *testing.T) {
 		return
 	}
 	// utilsクライアントの設定と作成
-	config := utils.NewClientConfig(apiKey)
+	config := utils.NewClientConfig(apiKey, consts.NewDefaultModel())
 	client := utils.NewClient(config)
 	weatherSchema := schema.NewWeatherFunctionCallSchema()
 	tools := []schema.Tool{*weatherSchema}

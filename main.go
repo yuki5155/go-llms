@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/yuki5155/go-llms/openai-llm/consts"
 	"github.com/yuki5155/go-llms/openai-llm/schema"
 	"github.com/yuki5155/go-llms/openai-llm/utils"
 )
@@ -17,7 +18,7 @@ func main() {
 	}
 
 	// utilsクライアントの設定と作成
-	config := utils.NewClientConfig(apiKey)
+	config := utils.NewClientConfig(apiKey, consts.NewDefaultModel())
 	client := utils.NewClient(config)
 
 	// WeatherSchemaの作成

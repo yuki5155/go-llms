@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/yuki5155/go-llms/openai-llm/consts"
 )
 
 const (
@@ -56,11 +58,11 @@ type ClientConfig struct {
 	Client   *http.Client
 }
 
-func NewClientConfig(apiKey string) *ClientConfig {
+func NewClientConfig(apiKey string, model consts.Model) *ClientConfig {
 	return &ClientConfig{
 		APIKey:   apiKey,
 		Endpoint: DefaultAPIEndpoint,
-		Model:    DefaultModel,
+		Model:    model.String(),
 		Client:   &http.Client{},
 	}
 }

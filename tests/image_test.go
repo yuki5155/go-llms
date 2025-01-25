@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yuki5155/go-llms/openai-llm/consts"
 	"github.com/yuki5155/go-llms/openai-llm/schema"
 	"github.com/yuki5155/go-llms/openai-llm/utils"
 )
@@ -54,7 +55,7 @@ func TestImageAnalyze(t *testing.T) {
 		return
 	}
 	// utilsクライアントの設定と作成
-	config := utils.NewClientConfig(apiKey)
+	config := utils.NewClientConfig(apiKey, consts.NewDefaultModel())
 	client := utils.NewClient(config)
 	weatherSchema := schema.NewWeatherFunctionCallSchema()
 	tools := []schema.Tool{*weatherSchema}
@@ -94,7 +95,7 @@ func TestImageAnalyzeWithStructuredOutput(t *testing.T) {
 		return
 	}
 	// utilsクライアントの設定と作成
-	config := utils.NewClientConfig(apiKey)
+	config := utils.NewClientConfig(apiKey, consts.NewDefaultModel())
 	client := utils.NewClient(config)
 	imageSchema := schema.NewImageAnalysisSchema()
 	schemaJSON, err := json.Marshal(imageSchema)
@@ -137,7 +138,7 @@ func TestObjectAnalyzeWithStructuredOutput(t *testing.T) {
 	}
 
 	// クライアントの設定と作成
-	config := utils.NewClientConfig(apiKey)
+	config := utils.NewClientConfig(apiKey, consts.NewDefaultModel())
 	client := utils.NewClient(config)
 
 	// オブジェクト分析スキーマの作成
@@ -203,7 +204,7 @@ func TestStructuredOutputBase64(t *testing.T) {
 		log.Fatal("Please set the OPENAI_API_KEY environment variable.")
 		return
 	}
-	config := utils.NewClientConfig(apiKey)
+	config := utils.NewClientConfig(apiKey, consts.NewDefaultModel())
 	client := utils.NewClient(config)
 	imageSchema := schema.NewImageAnalysisSchema()
 	schemaJSON, err := json.Marshal(imageSchema)
