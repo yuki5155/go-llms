@@ -1,12 +1,26 @@
-## How to Setup
+# go-llms
 
-```
+A Go library for interacting with Large Language Models (LLMs), primarily focused on OpenAI's GPT models with support for structured output and function calling.
+
+## Features
+
+- Structured JSON output from LLM responses
+- Function calling capabilities 
+- Support for images and multimodal inputs
+- Customizable schema definitions
+- Type-safe response handling
+
+## Installation
+
+```bash
 go get github.com/yuki5155/go-llms@v1.0.0
 ```
 
-## How to Use
+## Usage Examples
 
 ### Structured Output
+
+Retrieve structured JSON data from an LLM:
 
 ```go
 package main
@@ -21,17 +35,18 @@ import (
 )
 
 func main() {
+	// Set up API key
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		fmt.Println("Please set the OPENAI_API_KEY environment variable.")
 		return
 	}
 
-	// utilsクライアントの設定と作成
+	// Create client
 	config := utils.NewClientConfig(apiKey)
 	client := utils.NewClient(config)
 
-	// WeatherSchemaの作成
+	// Create a schema for the response
 	weatherSchema := schema.NewWeatherSchema()
 	schemaJSON, err := json.Marshal(weatherSchema)
 	if err != nil {
@@ -39,50 +54,64 @@ func main() {
 		return
 	}
 
-	// メッセージの準備
+	// Prepare messages
 	messages := []utils.Message{
 		utils.NewMessage(utils.RoleSystem, "You are a helpful assistant designed to output weather information in JSON format."),
 		utils.NewMessage(utils.RoleUser, "What's the weather like in Tokyo today?"),
 	}
 
-	// リクエストオプションの作成
+	// Create request options
 	opts := utils.RequestOptions{
 		Messages: messages,
 		Schema:   schemaJSON,
 	}
 
-	// utils APIにリクエストを送信
+	// Send request to OpenAI API
 	resp, err := client.SendRequestWithStructuredOutput(opts)
 	if err != nil {
 		fmt.Printf("Error sending request: %v\n", err)
 		return
 	}
 
-	// レスポンスの処理
+	// Process the response
 	weather, err := utils.HandleResponse[schema.WeatherResponse](resp)
 	if err != nil {
 		fmt.Printf("Error handling response: %v\n", err)
 		return
 	}
 
-	// キーを指定して情報を取得
+	// Access specific data
 	fmt.Printf("Temperature: %v\n", weather.Temperature)
 
-	// 結果の表示
+	// Display all results
 	prettyJSON, err := json.MarshalIndent(weather, "", "  ")
 	if err != nil {
 		fmt.Printf("Error formatting response: %v\n", err)
 		return
 	}
 	fmt.Printf("Weather Information:\n%s\n", string(prettyJSON))
-
 }
-
 ```
 
-## function call
+### Function Calling
+
+Implement OpenAI function calling for tool use:
 
 ```go
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"strings"
+
+	"github.com/yuki5155/go-llms/openai-llm/schema"
+	"github.com/yuki5155/go-llms/openai-llm/utils"
+)
+
 func loadEnv(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -93,7 +122,7 @@ func loadEnv(filename string) error {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		// コメントや空行をスキップ
+		// Skip comments and empty lines
 		if strings.HasPrefix(line, "#") || len(strings.TrimSpace(line)) == 0 {
 			continue
 		}
@@ -109,20 +138,24 @@ func loadEnv(filename string) error {
 	return scanner.Err()
 }
 
-func TestFunctionCall(t *testing.T) {
-	// load .env file
+func main() {
+	// Load environment variables
 	err := loadEnv(".env")
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+	
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		fmt.Println("Please set the OPENAI_API_KEY environment variable.")
 		return
 	}
-	// utilsクライアントの設定と作成
+	
+	// Create client
 	config := utils.NewClientConfig(apiKey)
 	client := utils.NewClient(config)
+	
+	// Create function schema
 	weatherSchema := schema.NewWeatherFunctionCallSchema()
 	tools := []schema.Tool{*weatherSchema}
 	toolsJSON, err := json.Marshal(tools)
@@ -130,33 +163,87 @@ func TestFunctionCall(t *testing.T) {
 		fmt.Printf("Error marshalling weather schema: %v\n", err)
 		return
 	}
+	
+	// Prepare messages
 	messages := []utils.Message{
 		utils.NewMessage(utils.RoleSystem, "You are a helpful assistant designed to output weather information in JSON format."),
 		utils.NewMessage(utils.RoleUser, "What's the weather like in Tokyo today?"),
 	}
+	
+	// Create request options
 	opts := utils.RequestOptions{
 		Messages: messages,
 		Schema:   toolsJSON,
 	}
+	
+	// Send function call request
 	res, err := client.SendRequestWithFunctionCall(opts)
 	if err != nil {
 		fmt.Printf("Error sending request: %v\n", err)
 		return
 	}
 
-	item, err := res.GetAllFunctionCalls("weather")
+	// Get function call results
+	functionCalls, err := res.GetAllFunctionCalls("weather")
 	if err != nil {
 		fmt.Printf("Error handling response: %v\n", err)
 		return
 	}
-	fmt.Println(item[0].Function.Arguments)
-
+	
+	fmt.Println(functionCalls[0].Function.Arguments)
 }
-
 ```
 
-## For Another Version
+## Project Structure
 
+- `openai-llm/`
+  - `schema/`: Data structures and JSON schemas
+  - `utils/`: Client utilities and helper functions
+
+## Available Schemas
+
+The library includes several pre-built schemas:
+
+- `WeatherSchema`: For retrieving weather information
+- `ImageAnalysisSchema`: For analyzing image content
+- `ObjectAnalysisSchema`: For identifying objects in images
+
+## Custom Schemas
+
+You can create custom schemas by implementing the appropriate interfaces and structures:
+
+```go
+func NewCustomSchema() *CustomSchema {
+    falseValue := false
+    return &CustomSchema{
+        Name: "custom_response",
+        Schema: BaseSchema{
+            Type: "object",
+            Properties: map[string]SchemaProperty{
+                "field1": {
+                    Type:        "string",
+                    Description: "Description of field1",
+                },
+                "field2": {
+                    Type:        "number",
+                    Description: "Description of field2",
+                },
+            },
+            Required:             []string{"field1", "field2"},
+            AdditionalProperties: &falseValue,
+        },
+    }
+}
 ```
+
+## Version Information
+
+Check available versions:
+
+```bash
 go list -m -versions github.com/yuki5155/go-llms
 ```
+
+## License
+
+See the LICENSE file for details.
