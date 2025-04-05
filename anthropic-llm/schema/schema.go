@@ -1,9 +1,5 @@
 package schema
 
-import (
-	"encoding/json"
-)
-
 // BaseSchema is the basic structure for all schemas
 type BaseSchema struct {
 	Type                 string                    `json:"type"`
@@ -24,6 +20,5 @@ type SchemaProperty struct {
 
 // RequestFormat defines the format for Anthropic API requests
 type RequestFormat struct {
-	Type     string          `json:"type"`
-	Schema   json.RawMessage `json:"schema"`
-} 
+	Type string `json:"type"`
+}

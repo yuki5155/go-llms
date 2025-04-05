@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type ContentBlock struct {
@@ -51,22 +52,47 @@ func ParseStructuredResponse[T any](content []ContentBlock) (*T, error) {
 		return nil, fmt.Errorf("empty content blocks")
 	}
 
-	var jsonContent json.RawMessage
+	var jsonText string
 
-	// Find the JSON content block
+	// For Claude API, the JSON might be returned in a text block with markdown code formatting
 	for _, block := range content {
-		if block.Type == "json" {
-			jsonContent = block.JSON
-			break
+		if block.Type == "text" {
+			// Check if text contains JSON wrapped in markdown code blocks
+			text := block.Text
+			// Try to extract JSON from code blocks if present
+			if strings.Contains(text, "```json") {
+				parts := strings.Split(text, "```json")
+				if len(parts) > 1 {
+					jsonPart := parts[1]
+					endMarker := strings.Index(jsonPart, "```")
+					if endMarker != -1 {
+						jsonText = strings.TrimSpace(jsonPart[:endMarker])
+					} else {
+						jsonText = strings.TrimSpace(jsonPart)
+					}
+				}
+			} else if strings.Contains(text, "```") {
+				// Try to extract JSON from generic code blocks
+				parts := strings.Split(text, "```")
+				if len(parts) > 1 {
+					jsonText = strings.TrimSpace(parts[1])
+				}
+			} else if strings.HasPrefix(text, "{") && strings.HasSuffix(text, "}") {
+				// Directly use the text if it appears to be JSON already
+				jsonText = text
+			}
+		} else if block.Type == "json" {
+			// If the API returns JSON directly in a JSON block
+			jsonText = string(block.JSON)
 		}
 	}
 
-	if jsonContent == nil {
+	if jsonText == "" {
 		return nil, fmt.Errorf("no JSON content found in response")
 	}
 
 	var result T
-	if err := json.Unmarshal(jsonContent, &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonText), &result); err != nil {
 		return nil, fmt.Errorf("error unmarshaling JSON content: %v", err)
 	}
 
@@ -99,29 +125,13 @@ func HandleResponse[T any](resp *APIResponse) (*T, error) {
 	// Debug the response
 	fmt.Printf("DEBUG - Response: %+v\n", resp)
 
-	// Print the raw response as JSON
-	rawJSON, _ := json.MarshalIndent(resp, "", "  ")
-	fmt.Printf("DEBUG - Raw response JSON: %s\n", string(rawJSON))
-
-	// For testing purposes, create a mock JSON response with the expected structure
-	mockJSON := `{
-		"location": "Tokyo",
-		"temperature": 25.5,
-		"unit": "C",
-		"forecast": "Sunny with some clouds",
-		"humidity": 65,
-		"wind_speed": 10.2,
-		"wind_direction": "NE",
-		"precipitation_pct": 10
-	}`
-
-	// Create a new instance of type T
-	var result T
-	if err := json.Unmarshal([]byte(mockJSON), &result); err != nil {
-		return nil, NewResponseError("ParseError", fmt.Sprintf("error unmarshaling mock JSON: %v", err))
+	// Parse structured JSON response
+	result, err := ParseStructuredResponse[T](resp.Message.Content)
+	if err != nil {
+		return nil, NewResponseError("ParseError", fmt.Sprintf("error parsing response: %v", err))
 	}
 
-	return &result, nil
+	return result, nil
 }
 
 // Check if an error is of a specific type

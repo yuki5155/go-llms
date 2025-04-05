@@ -247,6 +247,29 @@ func main() {
 }
 ```
 
+## Claude API JSON Formatting Note
+
+When working with Claude API for structured JSON output, there are a few key points to keep in mind:
+
+1. Claude doesn't support the `response_format` field in the same way as OpenAI. Instead, use a clear system message to instruct Claude on the expected JSON format.
+
+2. Claude returns JSON wrapped in markdown code blocks like:
+   ```
+   ```json
+   {
+     "property": "value"
+   }
+   ```
+   ```
+   
+3. The response parser in this library automatically extracts the JSON from these code blocks.
+
+Example system message for structured output:
+
+```
+You are a helpful assistant. Always respond in valid JSON format that follows this structure: {"key": "value", "number": 123}
+```
+
 ## Project Structure
 
 - `openai-llm/`
