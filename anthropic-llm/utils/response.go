@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -59,37 +60,42 @@ func ParseStructuredResponse[T any](content []ContentBlock) (*T, error) {
 		if block.Type == "text" {
 			// Check if text contains JSON wrapped in markdown code blocks
 			text := block.Text
-			// Try to extract JSON from code blocks if present
-			if strings.Contains(text, "```json") {
-				parts := strings.Split(text, "```json")
-				if len(parts) > 1 {
-					jsonPart := parts[1]
-					endMarker := strings.Index(jsonPart, "```")
-					if endMarker != -1 {
-						jsonText = strings.TrimSpace(jsonPart[:endMarker])
-					} else {
-						jsonText = strings.TrimSpace(jsonPart)
+
+			// Use more robust regex to extract JSON from markdown
+			jsonRegex := `(?s)\x60\x60\x60(?:json)?\s*({.*?})\s*\x60\x60\x60|\x60\x60\x60\s*({.*?})\s*\x60\x60\x60|^({.*})$`
+			reg := regexp.MustCompile(jsonRegex)
+			matches := reg.FindStringSubmatch(text)
+
+			if len(matches) > 1 {
+				// Find the first non-empty capture group
+				for i := 1; i < len(matches); i++ {
+					if matches[i] != "" {
+						jsonText = strings.TrimSpace(matches[i])
+						break
 					}
 				}
-			} else if strings.Contains(text, "```") {
-				// Try to extract JSON from generic code blocks
-				parts := strings.Split(text, "```")
-				if len(parts) > 1 {
-					jsonText = strings.TrimSpace(parts[1])
-				}
-			} else if strings.HasPrefix(text, "{") && strings.HasSuffix(text, "}") {
+			} else if strings.HasPrefix(strings.TrimSpace(text), "{") && strings.HasSuffix(strings.TrimSpace(text), "}") {
 				// Directly use the text if it appears to be JSON already
-				jsonText = text
+				jsonText = strings.TrimSpace(text)
+			}
+
+			// If we found valid JSON, break out of the loop
+			if jsonText != "" {
+				break
 			}
 		} else if block.Type == "json" {
 			// If the API returns JSON directly in a JSON block
 			jsonText = string(block.JSON)
+			break
 		}
 	}
 
 	if jsonText == "" {
 		return nil, fmt.Errorf("no JSON content found in response")
 	}
+
+	// Print debug info about the extracted JSON
+	fmt.Printf("DEBUG - Extracted JSON: %s\n", jsonText)
 
 	var result T
 	if err := json.Unmarshal([]byte(jsonText), &result); err != nil {

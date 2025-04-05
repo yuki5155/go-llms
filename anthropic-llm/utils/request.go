@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
+
+	"github.com/yuki5155/go-llms/anthropic-llm/schema"
 )
 
 const (
@@ -294,10 +297,107 @@ func (c *Client) SendRequestWithTool(opts RequestOptions) (*APIResponse, error) 
 	return &apiResp, nil
 }
 
+// generateJSONTemplate generates a JSON template from a schema
+func generateJSONTemplate(schemaData json.RawMessage) (string, error) {
+	var baseSchema schema.BaseSchema
+	if err := json.Unmarshal(schemaData, &baseSchema); err == nil {
+		return generateJSONTemplateFromSchema(baseSchema)
+	}
+
+	// If we couldn't parse the schema, provide a generic instruction
+	return "You MUST respond with valid JSON only. Your entire response should be valid parseable JSON without any text before or after.", nil
+}
+
+// formatJSONValue formats a value for inclusion in a JSON template
+func formatJSONValue(v interface{}) string {
+	switch val := v.(type) {
+	case string:
+		return fmt.Sprintf("\"%s\"", val)
+	case int, int64, float64, float32:
+		return fmt.Sprintf("%v", val)
+	case bool:
+		return fmt.Sprintf("%v", val)
+	case []string:
+		return fmt.Sprintf("[%s]", strings.Join(val, ", "))
+	case map[string]interface{}:
+		return "{...}" // Simplified for nested objects
+	default:
+		return "\"<value>\""
+	}
+}
+
+// generateRules generates rules based on schema properties
+func generateRules(schema schema.BaseSchema) string {
+	rules := []string{
+		"1. Do not add any fields not shown above",
+		"2. Do not nest any fields or create additional objects",
+		"3. Do not include notes about data being samples",
+		"4. Your entire response must be valid JSON only, with no text before or after",
+	}
+
+	// Add specific rules for required fields if any
+	if len(schema.Required) > 0 {
+		requiredFields := strings.Join(schema.Required, ", ")
+		rules = append(rules, fmt.Sprintf("5. The following fields are REQUIRED: %s", requiredFields))
+	}
+
+	// Add type-specific rules
+	stringFields := []string{}
+	numberFields := []string{}
+	integerFields := []string{}
+	booleanFields := []string{}
+
+	for name, prop := range schema.Properties {
+		switch prop.Type {
+		case "string":
+			stringFields = append(stringFields, name)
+		case "number":
+			numberFields = append(numberFields, name)
+		case "integer":
+			integerFields = append(integerFields, name)
+		case "boolean":
+			booleanFields = append(booleanFields, name)
+		}
+	}
+
+	ruleNum := 6
+
+	if len(stringFields) > 0 {
+		rules = append(rules, fmt.Sprintf("%d. All string fields (%s) MUST be simple STRING values, not objects or arrays",
+			ruleNum, strings.Join(stringFields, ", ")))
+		ruleNum++
+	}
+
+	if len(numberFields) > 0 {
+		rules = append(rules, fmt.Sprintf("%d. All number fields (%s) MUST be NUMERIC values without quotes or units (e.g., 23.5 NOT \"23.5\" or \"23.5°C\")",
+			ruleNum, strings.Join(numberFields, ", ")))
+		ruleNum++
+	}
+
+	if len(integerFields) > 0 {
+		rules = append(rules, fmt.Sprintf("%d. All integer fields (%s) MUST be INTEGER values without quotes or units (e.g., 42 NOT \"42\")",
+			ruleNum, strings.Join(integerFields, ", ")))
+		ruleNum++
+	}
+
+	if len(booleanFields) > 0 {
+		rules = append(rules, fmt.Sprintf("%d. All boolean fields (%s) MUST be true or false without quotes (e.g., true NOT \"true\")",
+			ruleNum, strings.Join(booleanFields, ", ")))
+		ruleNum++
+	}
+
+	return strings.Join(rules, "\n")
+}
+
 // SendRequestWithStructuredOutput sends a request to Anthropic API and returns the structured output
 func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIResponse, error) {
 	if len(opts.Messages) == 0 {
 		return nil, fmt.Errorf("at least one message is required")
+	}
+
+	// Check if schema is provided
+	if opts.Schema == nil {
+		return nil, fmt.Errorf("schema is required for structured output")
 	}
 
 	model := DefaultModel
@@ -305,50 +405,49 @@ func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIRespo
 		model = opts.Model
 	}
 
-	// Initialize request body
-	reqBody := map[string]interface{}{
-		"model":    model,
-		"messages": opts.Messages,
+	// Initialize request body - using RequestBody struct to ensure correct format
+	reqBody := RequestBody{
+		Model:    model,
+		Messages: opts.Messages,
 	}
 
 	// Add system prompt if provided
-	if opts.Schema != nil {
-		// Based on API requirements, let's not set response_format for now
-		// Instead, indicate in the system message that we want JSON output
-		systemMsg := opts.System
-		if systemMsg == "" {
-			systemMsg = "You are a helpful assistant."
+	systemMsg := opts.System
+	if systemMsg == "" {
+		systemMsg = "You are a helpful assistant."
+	}
+
+	// Generate template from schema
+	var baseSchema schema.BaseSchema
+	if err := json.Unmarshal(opts.Schema, &baseSchema); err == nil {
+		template, err := generateJSONTemplateFromSchema(baseSchema)
+		if err != nil {
+			fmt.Printf("WARNING: Error generating template from schema: %v\n", err)
+			reqBody.System = systemMsg + " You MUST respond with valid JSON only. Your entire response should be valid parseable JSON without any text before or after."
+			fmt.Println("DEBUG: Using fallback JSON format instruction")
+		} else {
+			reqBody.System = systemMsg + " " + template
+			fmt.Println("DEBUG: Using schema-derived JSON format")
 		}
-		reqBody["system"] = systemMsg + " Always respond in valid JSON format that follows this structure: {\"location\": \"city name\", \"temperature\": number, \"unit\": \"C or F\", \"forecast\": \"weather description\", \"humidity\": number, \"wind_speed\": number, \"wind_direction\": \"direction\", \"precipitation_pct\": number}."
-		fmt.Println("DEBUG: Using system message to request JSON format")
-	} else if opts.System != "" {
-		reqBody["system"] = opts.System
+	} else {
+		// Fallback to a generic instruction
+		reqBody.System = systemMsg + " You MUST respond with valid JSON only. If you don't have access to real-time data, provide realistic sample data in valid JSON format. DO NOT add any notes or explanations outside the JSON structure."
+		fmt.Println("DEBUG: Using generic JSON format instruction (fallback)")
 	}
 
 	// Add max tokens - required for Anthropic API, especially for image input
+	maxTokens := c.config.MaxTokens
 	if opts.MaxTokens != nil {
-		reqBody["max_tokens"] = *opts.MaxTokens
-		fmt.Printf("DEBUG: Using provided max_tokens: %d\n", *opts.MaxTokens)
-	} else {
-		// If not provided, use the default from the client config
-		reqBody["max_tokens"] = c.config.MaxTokens
-		fmt.Printf("DEBUG: Using default max_tokens: %d\n", c.config.MaxTokens)
+		maxTokens = *opts.MaxTokens
 	}
+	reqBody.MaxTokens = &maxTokens
+	fmt.Printf("DEBUG: Using max_tokens: %d\n", maxTokens)
 
 	// Add temperature if provided
 	if opts.Temperature != nil {
-		reqBody["temperature"] = *opts.Temperature
+		reqBody.Temperature = opts.Temperature
 		fmt.Printf("DEBUG: Using temperature: %f\n", *opts.Temperature)
 	}
-
-	// Optional response_format field for JSON schema if provided - COMMENTING OUT AS THIS CAUSES ERRORS
-	// if opts.Schema != nil {
-	// 	// For structured output, use the type field nested correctly
-	// 	reqBody["response_format"] = map[string]interface{}{
-	// 		"type": "json_object",
-	// 	}
-	// 	fmt.Println("DEBUG: Using correct JSON object response format")
-	// }
 
 	// Print detailed structure of messages for debugging
 	fmt.Println("====== DETAILED DEBUG OUTPUT ======")
@@ -535,4 +634,69 @@ func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIRespo
 	fmt.Println("============================")
 
 	return &apiResp, nil
+}
+
+// generateJSONTemplateFromSchema generates a JSON template from a BaseSchema
+func generateJSONTemplateFromSchema(baseSchema schema.BaseSchema) (string, error) {
+	// Extract properties and generate template
+	exampleValues := map[string]interface{}{
+		"string":  "example string",
+		"integer": 42,
+		"number":  23.5,
+		"boolean": true,
+		"array":   []string{"item1", "item2"},
+		"object":  map[string]interface{}{"key": "value"},
+	}
+
+	// Build template JSON
+	templateJSON := "{\n"
+	var lines []string
+
+	// Process properties in a deterministic order (alphabetical)
+	propNames := make([]string, 0, len(baseSchema.Properties))
+	for name := range baseSchema.Properties {
+		propNames = append(propNames, name)
+	}
+	sort.Strings(propNames)
+
+	for _, name := range propNames {
+		prop := baseSchema.Properties[name]
+		var exampleValue interface{}
+
+		// Use generic example based on type
+		if prop.Type != "" {
+			if val, ok := exampleValues[prop.Type]; ok {
+				exampleValue = val
+			} else {
+				exampleValue = fmt.Sprintf("<%s>", prop.Type)
+			}
+
+			// Use property description for example if available (only for strings)
+			if prop.Description != "" && prop.Type == "string" {
+				// Truncate if too long
+				if len(prop.Description) > 30 {
+					exampleValue = prop.Description[:27] + "..."
+				} else {
+					exampleValue = prop.Description
+				}
+			}
+		} else {
+			exampleValue = "<any value>"
+		}
+
+		// Format the property
+		line := fmt.Sprintf("  \"%s\": %s", name, formatJSONValue(exampleValue))
+		lines = append(lines, line)
+	}
+
+	templateJSON += strings.Join(lines, ",\n")
+	templateJSON += "\n}"
+
+	// Generate rules based on the properties
+	rules := generateRules(baseSchema)
+
+	template := fmt.Sprintf("You MUST respond with EXACTLY this JSON format:\n%s\n\nIMPORTANT RULES:\n%s",
+		templateJSON, rules)
+
+	return template, nil
 }
