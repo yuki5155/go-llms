@@ -143,13 +143,8 @@ func NewMessageWithImageBase64(imageBytes []byte, text string) Message {
 	// Encode the image to base64
 	base64Image := base64.StdEncoding.EncodeToString(imageBytes)
 
-	fmt.Printf("DEBUG: Image bytes length: %d\n", len(imageBytes))
-	fmt.Printf("DEBUG: Base64 encoded length: %d\n", len(base64Image))
-	fmt.Printf("DEBUG: First 20 chars of base64: %s...\n", base64Image[:20])
-
 	// Detect mime type - for now assuming jpeg
 	mediaType := "image/jpeg"
-	fmt.Printf("DEBUG: Using media type: %s\n", mediaType)
 
 	// Create the content array with text first, followed by image (may be more compatible with Anthropic's expected format)
 	content := []Content{
@@ -202,9 +197,6 @@ func (c *Client) SendRequestWithTool(opts RequestOptions) (*APIResponse, error) 
 		return nil, fmt.Errorf("error marshalling request: %v", err)
 	}
 
-	// Debug: Print the actual JSON being sent
-	fmt.Printf("DEBUG - Request JSON: %s\n", string(jsonData))
-
 	req, err := http.NewRequest("POST", c.config.Endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %v", err)
@@ -235,26 +227,8 @@ func (c *Client) SendRequestWithTool(opts RequestOptions) (*APIResponse, error) 
 		return nil, fmt.Errorf("error parsing response: %v, body: %s", err, string(body))
 	}
 
-	// Debug the parsed response structure
-	fmt.Println("====== PARSED RESPONSE ======")
-	fmt.Printf("Response ID: %s\n", apiResp.ID)
-	fmt.Printf("Response Type: %s\n", apiResp.Type)
-	fmt.Printf("Response Model: %s\n", apiResp.Model)
-
-	// Debug the raw response JSON to verify content structure
-	fmt.Println("====== RAW RESPONSE JSON ======")
-	fmt.Println(string(body))
-	fmt.Println("===============================")
-
-	// Check if response message is properly structured
-	fmt.Println("====== RESPONSE MESSAGE DETAILS ======")
-	fmt.Printf("Message ID: %s\n", apiResp.Message.ID)
-	fmt.Printf("Message Role: %s\n", apiResp.Message.Role)
-	fmt.Printf("Content blocks count: %d\n", len(apiResp.Message.Content))
-
 	// Fix content if it's not correctly parsed
 	if len(apiResp.Message.Content) == 0 {
-		fmt.Println("Warning: No content blocks in the response message")
 		// Try to extract content from the raw response
 		var rawResp map[string]interface{}
 		if err := json.Unmarshal(body, &rawResp); err == nil {
@@ -273,26 +247,6 @@ func (c *Client) SendRequestWithTool(opts RequestOptions) (*APIResponse, error) 
 			}
 		}
 	}
-
-	// Display content information
-	if len(apiResp.Message.Content) > 0 {
-		fmt.Printf("Message content blocks: %d\n", len(apiResp.Message.Content))
-		for i, block := range apiResp.Message.Content {
-			fmt.Printf("Block %d type: %s\n", i, block.Type)
-			if block.Type == "text" {
-				textPreview := block.Text
-				if len(textPreview) > 100 {
-					textPreview = textPreview[:100] + "... [truncated]"
-				}
-				fmt.Printf("Block %d text preview: %s\n", i, textPreview)
-			} else {
-				fmt.Printf("Block %d is not text type, content may be in another field\n", i)
-			}
-		}
-	} else {
-		fmt.Println("Warning: No content blocks in the response message after recovery attempt")
-	}
-	fmt.Println("============================")
 
 	return &apiResp, nil
 }
@@ -422,17 +376,13 @@ func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIRespo
 	if err := json.Unmarshal(opts.Schema, &baseSchema); err == nil {
 		template, err := generateJSONTemplateFromSchema(baseSchema)
 		if err != nil {
-			fmt.Printf("WARNING: Error generating template from schema: %v\n", err)
 			reqBody.System = systemMsg + " You MUST respond with valid JSON only. Your entire response should be valid parseable JSON without any text before or after."
-			fmt.Println("DEBUG: Using fallback JSON format instruction")
 		} else {
 			reqBody.System = systemMsg + " " + template
-			fmt.Println("DEBUG: Using schema-derived JSON format")
 		}
 	} else {
 		// Fallback to a generic instruction
 		reqBody.System = systemMsg + " You MUST respond with valid JSON only. If you don't have access to real-time data, provide realistic sample data in valid JSON format. DO NOT add any notes or explanations outside the JSON structure."
-		fmt.Println("DEBUG: Using generic JSON format instruction (fallback)")
 	}
 
 	// Add max tokens - required for Anthropic API, especially for image input
@@ -441,82 +391,16 @@ func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIRespo
 		maxTokens = *opts.MaxTokens
 	}
 	reqBody.MaxTokens = &maxTokens
-	fmt.Printf("DEBUG: Using max_tokens: %d\n", maxTokens)
 
 	// Add temperature if provided
 	if opts.Temperature != nil {
 		reqBody.Temperature = opts.Temperature
-		fmt.Printf("DEBUG: Using temperature: %f\n", *opts.Temperature)
-	}
-
-	// Print detailed structure of messages for debugging
-	fmt.Println("====== DETAILED DEBUG OUTPUT ======")
-	if len(opts.Messages) > 0 {
-		// Debug the first message
-		fmt.Println("First message in request:")
-		firstMsg := opts.Messages[0]
-		msgBytes, _ := json.MarshalIndent(firstMsg, "", "  ")
-		fmt.Printf("%s\n", string(msgBytes))
-
-		// Debug the first content item if it exists
-		if len(firstMsg.Content) > 0 {
-			fmt.Println("Content items in first message:")
-			for i, content := range firstMsg.Content {
-				fmt.Printf("Content item %d:\n", i)
-				// Create a copy for safe printing (don't show the full base64 data)
-				contentPrintable := content
-				if content.Type == "image" && content.Source != nil && content.Source.Data != "" {
-					dataLength := len(content.Source.Data)
-					previewLength := 30
-					if dataLength > previewLength {
-						truncated := content.Source.Data[:previewLength] + "...[truncated]..."
-						// Create a copy with truncated data for display
-						sourceCopy := *content.Source
-						sourceCopy.Data = truncated
-						contentPrintable = Content{
-							Type:   content.Type,
-							Source: &sourceCopy,
-						}
-					}
-				}
-
-				printableBytes, _ := json.MarshalIndent(contentPrintable, "", "  ")
-				fmt.Printf("%s\n", string(printableBytes))
-
-				// Extra debug for image content
-				if content.Type == "image" && content.Source != nil {
-					fmt.Printf("Image content found. Type: %s, MediaType: %s, Data length: %d bytes\n",
-						content.Source.Type,
-						content.Source.MediaType,
-						len(content.Source.Data))
-
-					// Check if data is properly formatted for base64 image
-					if content.Source.Type == "base64" {
-						if !strings.HasPrefix(content.Source.Data, "/9j/") &&
-							!strings.HasPrefix(content.Source.Data, "iVBOR") &&
-							!strings.HasPrefix(content.Source.Data, "R0lGOD") &&
-							!strings.HasPrefix(content.Source.Data, "UklGR") {
-							fmt.Println("WARNING: Base64 data doesn't start with common image headers")
-							fmt.Printf("First 10 bytes of base64 data: %s\n", content.Source.Data[:10])
-						}
-					}
-				}
-			}
-		}
 	}
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("error marshalling request: %v", err)
 	}
-
-	// Print the full request JSON with indentation for debugging
-	prettyJSON, _ := json.MarshalIndent(reqBody, "", "  ")
-	fmt.Printf("====== FULL REQUEST JSON ======\n%s\n", string(prettyJSON))
-	fmt.Println("================================")
-
-	// Print the actual request bytes size
-	fmt.Printf("DEBUG: Request JSON size: %d bytes\n", len(jsonData))
 
 	req, err := http.NewRequest("POST", c.config.Endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -527,21 +411,6 @@ func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIRespo
 	req.Header.Set("x-api-key", c.config.APIKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	// Print request headers for debugging
-	fmt.Println("====== REQUEST HEADERS ======")
-	for name, values := range req.Header {
-		for _, value := range values {
-			// Obfuscate the API key for security
-			if name == "X-Api-Key" {
-				fmt.Printf("%s: [REDACTED]\n", name)
-			} else {
-				fmt.Printf("%s: %s\n", name, value)
-			}
-		}
-	}
-	fmt.Println("=============================")
-
-	fmt.Println("DEBUG: Sending request to endpoint:", c.config.Endpoint)
 	resp, err := c.config.Client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error sending request: %v", err)
@@ -553,18 +422,6 @@ func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIRespo
 		return nil, fmt.Errorf("error reading response: %v", err)
 	}
 
-	// Debug response
-	fmt.Printf("Response status: %d\n", resp.StatusCode)
-	fmt.Printf("Response headers: %v\n", resp.Header)
-
-	// For large responses, only print a preview
-	const maxBodyPreview = 500
-	bodyPreview := string(body)
-	if len(bodyPreview) > maxBodyPreview {
-		bodyPreview = bodyPreview[:maxBodyPreview] + "... [truncated]"
-	}
-	fmt.Printf("Response body preview: %s\n", bodyPreview)
-
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned non-200 status code: %d, body: %s", resp.StatusCode, string(body))
 	}
@@ -574,26 +431,8 @@ func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIRespo
 		return nil, fmt.Errorf("error parsing response: %v, body: %s", err, string(body))
 	}
 
-	// Debug the parsed response structure
-	fmt.Println("====== PARSED RESPONSE ======")
-	fmt.Printf("Response ID: %s\n", apiResp.ID)
-	fmt.Printf("Response Type: %s\n", apiResp.Type)
-	fmt.Printf("Response Model: %s\n", apiResp.Model)
-
-	// Debug the raw response JSON to verify content structure
-	fmt.Println("====== RAW RESPONSE JSON ======")
-	fmt.Println(string(body))
-	fmt.Println("===============================")
-
-	// Check if response message is properly structured
-	fmt.Println("====== RESPONSE MESSAGE DETAILS ======")
-	fmt.Printf("Message ID: %s\n", apiResp.Message.ID)
-	fmt.Printf("Message Role: %s\n", apiResp.Message.Role)
-	fmt.Printf("Content blocks count: %d\n", len(apiResp.Message.Content))
-
 	// Fix content if it's not correctly parsed
 	if len(apiResp.Message.Content) == 0 {
-		fmt.Println("Warning: No content blocks in the response message")
 		// Try to extract content from the raw response
 		var rawResp map[string]interface{}
 		if err := json.Unmarshal(body, &rawResp); err == nil {
@@ -612,26 +451,6 @@ func (c *Client) SendRequestWithStructuredOutput(opts RequestOptions) (*APIRespo
 			}
 		}
 	}
-
-	// Display content information
-	if len(apiResp.Message.Content) > 0 {
-		fmt.Printf("Message content blocks: %d\n", len(apiResp.Message.Content))
-		for i, block := range apiResp.Message.Content {
-			fmt.Printf("Block %d type: %s\n", i, block.Type)
-			if block.Type == "text" {
-				textPreview := block.Text
-				if len(textPreview) > 100 {
-					textPreview = textPreview[:100] + "... [truncated]"
-				}
-				fmt.Printf("Block %d text preview: %s\n", i, textPreview)
-			} else {
-				fmt.Printf("Block %d is not text type, content may be in another field\n", i)
-			}
-		}
-	} else {
-		fmt.Println("Warning: No content blocks in the response message after recovery attempt")
-	}
-	fmt.Println("============================")
 
 	return &apiResp, nil
 }
